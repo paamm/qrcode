@@ -175,6 +175,10 @@ class QRImage:
         self._version = new_version
         self._size = self._version * 4 + 17
 
+        # Recreate array and unmasked since new version means new size
+        self._array = [[-1 for _ in range(self._size)] for _ in range(self._size)]
+        self._unmasked = [[-1 for _ in range(self._size)] for _ in range(self._size)]
+
         # regen encoded data with new version
         self._data = encoding.generate_codewords(self._message, self._version, self._ecl)
         self._need_regen = True  # Set need_regen to True to only generate image when requested for the first time.
