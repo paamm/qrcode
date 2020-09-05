@@ -166,8 +166,6 @@ class QRImage:
         if self._version >= 7:
             draw_version_information()
 
-    # TODO for every setters, check if message still fits with settings (generate_codewords throws exception?)
-
     def get_version(self) -> int:
         return self._version
 

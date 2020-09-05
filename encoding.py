@@ -131,9 +131,22 @@ def convert_to_binary(data: List[int], mode: DATA_MODE, version: int, ec: EC_LEV
 
 
 def generate_codewords(data: str, version: int, ec: EC_LEVEL) -> str:
+    """
+    Generates the codewords (data and EC) based on the provided arguments.
+
+    :param data: Message to encode
+    :param version: QR version
+    :param ec: Error correction level
+    :raise ValueError: if the data string is too long for the specified version and EC level
+    :return: String of codeblocks in binary
+    """
     data_mode = optimal_data_mode(data)
     encoded_data = encode(data, data_mode)
     binary_stream = convert_to_binary(encoded_data, data_mode, version, ec)
+
+    max_length = STREAM_LENGTH.get(str(version) + ec.name)
+    if len(binary_stream) > max_length:
+        raise ValueError("The message to encode is too large for the specified version and EC level.")
 
     ec_short = EC_SHORT.get(str(version) + ec.name)
     ec_long = EC_LONG.get(str(version) + ec.name)
