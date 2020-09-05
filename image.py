@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 import numpy
 from PIL import Image
@@ -8,18 +8,23 @@ import encoding
 
 
 class QRImage:
-    def __init__(self, version: int, error_correction: EC_LEVEL, message: str):
+    def __init__(self, version: int, ec_level: Union[EC_LEVEL, str], message: str):
         self._size = version * 4 + 17
         self._version = version
-        self._ecl = error_correction
         self._message = message
+
+        # Cast string to EC_LEVEL enum
+        if type(ec_level) is str:
+            self._ecl = EC_LEVEL[ec_level]
+        else:
+            self._ecl = ec_level
 
         # Create 2 arrays with correct size based on the version in the parameters
         self._array = [[-1 for _ in range(self._size)] for _ in range(self._size)]
         self._unmasked = [[-1 for _ in range(self._size)] for _ in range(self._size)]
 
         # Compute the codewords for the message
-        self._data = encoding.generate_codewords(message, version, error_correction)
+        self._data = encoding.generate_codewords(self._message, self._version, self._ecl)
         # Create the qr code
         self._draw_initial()  # drawing the static modules (finder patterns, etc)
         self.write_data()
@@ -185,8 +190,11 @@ class QRImage:
     def get_error_correction_level(self) -> EC_LEVEL:
         return self._ecl
 
-    def set_error_correction_level(self, new_ecl: EC_LEVEL):
-        self._ecl = new_ecl
+    def set_error_correction_level(self, new_ecl: Union[EC_LEVEL, str]):
+        if type(new_ecl) is str:
+            self._ecl = EC_LEVEL[new_ecl]  # Cast to enum
+        else:
+            self._ecl = new_ecl
 
         self._data = encoding.generate_codewords(self._message, self._version, self._ecl)
         self._need_regen = True
