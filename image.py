@@ -165,7 +165,7 @@ class QRImage:
 
     def write_data(self):
 
-        def new_next_move(x: int, y: int) -> Tuple[int, int]:
+        def next_move(x: int, y: int) -> Tuple[int, int]:
             if x is None and y is None:
                 # initial
                 return self.size - 1, self.size - 1
@@ -230,10 +230,10 @@ class QRImage:
         x = y = None
 
         for i in range(len(self.data)):
-            x, y = new_next_move(x, y)
+            x, y = next_move(x, y)
 
             while self.unmasked[y][x] != -1:  # if not -1, has been written to (most likely alignment pattern)
-                x, y = new_next_move(x, y)
+                x, y = next_move(x, y)
 
             self.unmasked[y][x] = int(self.data[i])
 
