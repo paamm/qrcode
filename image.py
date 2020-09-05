@@ -25,8 +25,8 @@ class QRImage:
         self.write_data()
 
         # Image and whether we need to regen it or not before showing it (when changing version, etc.. is implemented)
-        self.image = self.__generate_image__()
-        self.need_regen: bool = False
+        self.__image__ = self.__generate_image__()
+        self.__need_regen__: bool = False
 
     def __draw_initial__(self):
 
@@ -433,7 +433,7 @@ class QRImage:
 
         return colored_rows() + colored_cols() + colored_boxes() + finder_pattern() + color_proportion()
 
-    def __generate_image__(self):
+    def __generate_image__(self) -> Image:
         np_array = [[255 if i != 1 else 0 for i in row] for row in self.array]
 
         # Upscaling
@@ -442,13 +442,7 @@ class QRImage:
 
         return Image.fromarray(np_array.astype(numpy.uint8), mode='L')
 
-    def show_image(self):
-        if self.need_regen:
-            self.image = self.__generate_image__()
-        self.image.show()
-
-    def save_image(self, filename="qr"):
-        if self.need_regen:
-            self.image = self.__generate_image__()
-        filename += ".png"
-        self.image.save(filename)
+    def get_image(self) -> Image:
+        if self.__need_regen__:
+            self.__image__ = self.__generate_image__()
+        return self.__image__
