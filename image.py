@@ -164,102 +164,6 @@ class QRImage:
             draw_version_information()
 
     def write_data(self):
-        def top(x: int) -> int:
-            """
-            Returns the max height you can write to for the specified x coordinate.
-            :param x: The current column
-            :return: The max height (inclusive) accessible.
-            """
-            if x >= self.size - 8 or x <= 8:
-                # under the finder patterns
-                return 9
-            else:
-                return 0
-
-        def bottom(x: int) -> int:
-            return self.size - 1 if x > 8 else self.size - 9
-
-        def going_up(x: int) -> bool:
-            """Returns true for up, false for down"""
-            # An enum would be better, but since it would only be used once, didn't create it
-            if x <= 6:
-                # Before vertical timing pattern
-                return (x // 2) % 2 != 0
-            else:
-                # After vertical timing pattern
-                return ((x + 1) // 2) % 2 == 0
-
-        def next_move(x: int, y: int) -> Tuple[int, int]:
-            # initial
-            if x is None and y is None:
-                return self.size - 1, self.size - 1
-
-            if x > 6:
-                # normal section
-                if going_up(x):
-                    if x % 2 == 0:
-                        # Going left
-                        return x - 1, y
-                    else:
-                        if y == top(x):
-                            if x == 7:
-                                # Edge-case: corner of vertical timing and top-left position pattern
-                                return x - 2, y
-                            else:
-                                # Normal case
-                                return x - 1, y
-
-                        # Going up, check not at horizontal timing pattern
-                        if y == 7:
-                            # below pattern
-                            return x + 1, y - 2
-                        else:
-                            return x + 1, y - 1
-                else:
-                    # Downward
-                    if x % 2 == 0:
-                        # Going left
-                        return x - 1, y
-                    else:
-                        # Going down
-                        if y == bottom(x):
-                            if x == 9:
-                                # Edge-case: next to bottom left position pattern, weird jump
-                                return 8, self.size - 9
-                            else:
-                                # Normal case
-                                return x - 1, y
-
-                        # Check if not at horizontal timing pattern
-                        if y == 5:
-                            # above pattern
-                            return x + 1, y + 2
-                        else:
-                            return x + 1, y + 1
-            else:
-                # Left-most section
-                if going_up(x):
-                    if x % 2 == 1:
-                        # going left
-                        return x - 1, y
-                    else:
-                        # going up
-                        if y == top(x):
-                            return x - 1, y
-                        else:
-                            return x + 1, y - 1
-                    pass
-                else:
-                    # going down
-                    if x % 2 == 1:
-                        # going left
-                        return x - 1, y
-                    else:
-                        # going down
-                        if y == bottom(x):
-                            return x - 1, y
-                        else:
-                            return x + 1, y + 1
 
         def new_next_move(x: int, y: int) -> Tuple[int, int]:
             if x is None and y is None:
@@ -326,13 +230,12 @@ class QRImage:
         x = y = None
 
         for i in range(len(self.data)):
-        # for i in range(3000):
             x, y = new_next_move(x, y)
 
             while self.unmasked[y][x] != -1:  # if not -1, has been written to (most likely alignment pattern)
                 x, y = new_next_move(x, y)
 
-            # self.unmasked[y][x] = int(self.data[i])
+            self.unmasked[y][x] = int(self.data[i])
 
         self.__write_best_mask__()
 
@@ -382,7 +285,7 @@ class QRImage:
             return masked_array
 
         # initialize values by computing mask 0, loop for mask 1-7
-        # self.array = mask_pattern(0)
+        self.array = mask_pattern(0)
         self.array = self.unmasked
         lowest_score = self.__calculate_mask_score__(self.array)
 
@@ -391,7 +294,7 @@ class QRImage:
             score = self.__calculate_mask_score__(masked)
             if score < lowest_score:
                 lowest_score = score
-                # self.array = masked
+                self.array = masked
 
     def __write_format_information__(self, array: List[List[int]], mask_pattern: int):
         # Using hardcoded table since there is no real reason to actually compute the format bits each time
