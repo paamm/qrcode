@@ -191,30 +191,23 @@ def generate_codewords(data: str, version: int, ec: EC_LEVEL) -> str:
     # Divide the total amount of ecc codewords needed by the number of blocks to get # of ecc codewords per block
     ecc_amount = NUMBER_OF_ECC.get(str(version) + ec.name) // total_blocks
 
-    # TODO refactor next two loops in one function in rs.py? rs.create_ecc_block()?
     for i in range(ec_short):
         # Short blocks
         # Generates the Reed-Solomon EC codewords and adds them to the ec_blocks list
         block = binary_data[short_length * i:short_length * (i + 1)]  # get sublist that is 'short_length' long
-        codewords = [block[j:j+8] for j in range(0, len(block), 8)]
-        msg_poly = rs.message_poly(codewords)
-        gen_poly = rs.rs_generator_poly(ecc_amount)
-        rs_codewords = rs.gf_polynomial_division(msg_poly, gen_poly)
-        rs_codewords = ["{0:08b}".format(k) for k in rs_codewords]  # convert base10 ecc to binary
         blocks.append(block)
-        ec_blocks.append("".join(rs_codewords))
+
+        codewords = [block[j:j+8] for j in range(0, len(block), 8)]
+        ec_blocks.append(rs.create_ecc_block(codewords, ecc_amount))
 
     offset = ec_short * short_length  # create an offset to start reading after the data already read in short blocks
     for i in range(ec_long):
         # Long blocks
         block = binary_data[offset + long_length * i:offset + long_length * (i + 1)]
-        codewords = [block[j:j + 8] for j in range(0, len(block), 8)]
-        msg_poly = rs.message_poly(codewords)
-        gen_poly = rs.rs_generator_poly(ecc_amount)
-        rs_codewords = rs.gf_polynomial_division(msg_poly, gen_poly)
-        rs_codewords = ["{0:08b}".format(k) for k in rs_codewords]  # convert base10 ecc to binary
         blocks.append(block)
-        ec_blocks.append("".join(rs_codewords))
+
+        codewords = [block[j:j + 8] for j in range(0, len(block), 8)]
+        ec_blocks.append(rs.create_ecc_block(codewords, ecc_amount))
 
     final_stream = ""
 

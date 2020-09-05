@@ -101,6 +101,22 @@ def message_poly(codewords: List[str]):
     return msg_poly
 
 
+def create_ecc_block(codewords: List[str], ecc_amount: int) -> str:
+    """
+    Creates the ECCs for a block
+
+    :param codewords: The data codewords to use
+    :param ecc_amount: The number of EC codewords to generate
+    :return: The ECCs as a string
+    """
+    msg_poly = message_poly(codewords)
+    gen_poly = rs_generator_poly(ecc_amount)
+
+    rs_codewords = gf_polynomial_division(msg_poly, gen_poly)
+    rs_codewords = ["{0:08b}".format(i) for i in rs_codewords]  # convert from base 10 to binary
+    return "".join(rs_codewords)  # convert list to string
+
+
 gf_exp = [0] * 256
 gf_log = [0] * 256
 
