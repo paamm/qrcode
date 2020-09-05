@@ -325,6 +325,7 @@ class QRImage:
         """
         Reads the _unmasked matrix to determine the best mask and writes the masked matrix to _array
         """
+
         def is_protected(x: int, y: int) -> bool:
             """
             Checks if we can make changes to the coordinates
@@ -355,28 +356,30 @@ class QRImage:
             masked_array = [row[:] for row in self._unmasked]  # deep copy
             self._write_format_information(masked_array, pattern)
 
-            # TODO instead of checking value of pattern multiple times, check once before going into loop and
-            #  create mask_pattern lambda formula containing the formula to make code more readable
+            if pattern == 0:
+                def pattern_formula(x, y): return (y + x) % 2 == 0
+            elif pattern == 1:
+                def pattern_formula(x, y): return y % 2 == 0
+            elif pattern == 2:
+                def pattern_formula(x, y): return x % 3 == 0
+            elif pattern == 3:
+                def pattern_formula(x, y): return (y + x) % 3 == 0
+            elif pattern == 4:
+                def pattern_formula(x, y): return ((y // 2) + (x // 3)) % 2 == 0
+            elif pattern == 5:
+                def pattern_formula(x, y): return (y * x) % 2 + (y * x) % 3 == 0
+            elif pattern == 6:
+                def pattern_formula(x, y): return ((y * x) % 2 + (y * x) % 3) % 2 == 0
+            elif pattern == 7:
+                def pattern_formula(x, y): return ((y + x) % 2 + (y * x) % 3) % 2 == 0
+            else:
+                raise ValueError("Illegal mask pattern")  # technically should not be called
+
             # Xor the unmasked array with the pattern formula to get a masked matrix
             for x in range(self._size):
                 for y in range(self._size):
                     if not is_protected(x, y):  # check coordinates aren't static pattern, if not, proceed
-                        if pattern == 0:
-                            masked_array[y][x] ^= ((y + x) % 2 == 0)
-                        elif pattern == 1:
-                            masked_array[y][x] ^= (y % 2 == 0)
-                        elif pattern == 2:
-                            masked_array[y][x] ^= (x % 3 == 0)
-                        elif pattern == 3:
-                            masked_array[y][x] ^= ((y + x) % 3 == 0)
-                        elif pattern == 4:
-                            masked_array[y][x] ^= (((y // 2) + (x // 3)) % 2 == 0)
-                        elif pattern == 5:
-                            masked_array[y][x] ^= ((y * x) % 2 + (y * x) % 3 == 0)
-                        elif pattern == 6:
-                            masked_array[y][x] ^= (((y * x) % 2 + (y * x) % 3) % 2 == 0)
-                        elif pattern == 7:
-                            masked_array[y][x] ^= (((y + x) % 2 + (y * x) % 3) % 2 == 0)
+                        masked_array[y][x] ^= pattern_formula(x, y)
             return masked_array
 
         # initialize values by computing mask 0, loop for mask 1-7
