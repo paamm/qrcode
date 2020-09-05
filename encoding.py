@@ -76,10 +76,7 @@ def encode(data: str, mode: DATA_MODE = None) -> List[int]:
 
         return encoded
     elif mode == DATA_MODE.Byte:
-        encoded = []
-        for char in data.encode("iso8859"):
-            encoded.append(char)
-        return encoded
+        return list(data.encode("iso8859"))
 
 
 def _convert_to_binary(data: List[int], mode: DATA_MODE, version: int, ec: EC_LEVEL) -> str:
@@ -245,4 +242,3 @@ def generate_codewords(data: str, version: int, ec: EC_LEVEL) -> str:
     final_stream += "0" * REMAINDER_BITS[version]
 
     return final_stream
-
