@@ -9,27 +9,35 @@ import encoding
 
 class QRImage:
     def __init__(self, version: int, ec_level: Union[EC_LEVEL, str], message: str):
+        """
+        Create a QRImage object with the given arguments.
+
+        :param version: The QR version to use
+        :param ec_level: The error correction level to use
+        :param message: The message to write to the QR code
+        """
         self._size = version * 4 + 17
         self._version = version
         self._message = message
 
-        # Cast string to EC_LEVEL enum
+        # Cast ec_level to EC_LEVEL enum if needed
         if type(ec_level) is str:
             self._ecl = EC_LEVEL[ec_level]
         else:
             self._ecl = ec_level
 
-        # Create 2 arrays with correct size based on the version in the parameters
+        # Create 2 arrays with correct size based on the version
         self._array = [[-1 for _ in range(self._size)] for _ in range(self._size)]
         self._unmasked = [[-1 for _ in range(self._size)] for _ in range(self._size)]
 
         # Compute the codewords for the message
         self._data = encoding.generate_codewords(self._message, self._version, self._ecl)
+
         # Create the qr code
         self._draw_initial()  # drawing the static modules (finder patterns, etc)
-        self.write_data()
+        self._write_data()  # draw the data and apply masking
 
-        # Image and whether we need to regen it or not before showing it (when changing version, etc.. is implemented)
+        # Create the PIL image
         self._image = self._generate_image()
         self._need_regen: bool = False
 
@@ -74,14 +82,14 @@ class QRImage:
                 self._unmasked[y][7] = 0
                 self._unmasked[y][8] = y == 6
 
-            #top right
+            # top right
             for x in range(self._size - 8, self._size):
                 self._unmasked[7][x] = 0
                 self._unmasked[8][x] = 0
             for y in range(9):
                 self._unmasked[y][self._size - 8] = 0
 
-            #bottom left
+            # bottom left
             for y in range(self._size - 8, self._size):
                 self._unmasked[y][7] = 0
                 self._unmasked[y][8] = 0
@@ -175,6 +183,12 @@ class QRImage:
         return self._version
 
     def set_version(self, new_version: int):
+        """
+        Set a new version for the instance
+
+        :param new_version: The new version to use
+        :raise ValueError: if the current message is too long for the instance's error correction level and new version
+        """
         self._version = new_version
         self._size = self._version * 4 + 17
 
@@ -185,12 +199,18 @@ class QRImage:
         # regen encoded data with new version
         self._data = encoding.generate_codewords(self._message, self._version, self._ecl)
         self._need_regen = True  # Set need_regen to True to only generate image when requested for the first time.
-        self.write_data()
+        self._write_data()
 
     def get_error_correction_level(self) -> EC_LEVEL:
         return self._ecl
 
     def set_error_correction_level(self, new_ecl: Union[EC_LEVEL, str]):
+        """
+        Set a new error correction level for the instance
+
+        :param new_ecl: The new error correction level to use
+        :raise ValueError: if the current message is too long for the instance's version and new error correction level
+        """
         if type(new_ecl) is str:
             self._ecl = EC_LEVEL[new_ecl]  # Cast to enum
         else:
@@ -198,21 +218,36 @@ class QRImage:
 
         self._data = encoding.generate_codewords(self._message, self._version, self._ecl)
         self._need_regen = True
-        self.write_data()
+        self._write_data()
 
     def get_message(self) -> str:
         return self._message
 
     def set_message(self, new_msg: str):
+        """
+        Set a new message for the instance
+
+        :param new_msg: The new message to use
+        :raise ValueError: if the new message is too long for the instance's version and error correction level
+        """
         self._message = new_msg
-        # regen encoded data with new version
         self._data = encoding.generate_codewords(self._message, self._version, self._ecl)
         self._need_regen = True
-        self.write_data()
+        self._write_data()
 
-    def write_data(self):
+    def _write_data(self):
+        """
+        Write the contents of _data to the _unmasked matrix
+        """
 
         def next_move(x: int, y: int) -> Tuple[int, int]:
+            """
+            Calculates the new position based on the current one.
+
+            :param x: The current x position
+            :param y: The current y position
+            :return: A tuple containing the new x and y coordinates
+            """
             if x is None and y is None:
                 # initial
                 return self._size - 1, self._size - 1
@@ -223,7 +258,7 @@ class QRImage:
 
             if x >= 7:
                 # normal zone
-                up = ((x + 1) // 2) % 2 == 0
+                up = ((x + 1) // 2) % 2 == 0  # boolean checking if we're moving up
 
                 if up:
                     if x % 2 == 0:
@@ -279,15 +314,24 @@ class QRImage:
         for i in range(len(self._data)):
             x, y = next_move(x, y)
 
-            while self._unmasked[y][x] != -1:  # if not -1, has been written to (most likely alignment pattern)
-                x, y = next_move(x, y)
+            while self._unmasked[y][x] != -1:  # if not -1, has been written to (static pattern)
+                x, y = next_move(x, y)  # go to next position until we're not in a static pattern anymore
 
-            self._unmasked[y][x] = int(self._data[i])
+            self._unmasked[y][x] = int(self._data[i])  # write bit to current position
 
-        self._write_best_mask()
+        self._write_best_mask()  # Find the optimal mask for the unmasked matrix
 
     def _write_best_mask(self):
+        """
+        Reads the _unmasked matrix to determine the best mask and writes the masked matrix to _array
+        """
         def is_protected(x: int, y: int) -> bool:
+            """
+            Checks if we can make changes to the coordinates
+            :param x: The x coordinate
+            :param y: The y coordinate
+            :return: True if it is protected, false if it is not and we can make changes
+            """
             if x == 6 or y == 6:
                 # Timing pattern
                 return True
@@ -296,6 +340,7 @@ class QRImage:
                 return True
 
             if self._version > 1:
+                # Alignment pattern
                 positions = ALIGNMENT_POSITIONS[self._version]
                 for position in positions:
                     x_pos, y_pos = position
@@ -310,9 +355,12 @@ class QRImage:
             masked_array = [row[:] for row in self._unmasked]  # deep copy
             self._write_format_information(masked_array, pattern)
 
+            # TODO instead of checking value of pattern multiple times, check once before going into loop and
+            #  create mask_pattern lambda formula containing the formula to make code more readable
+            # Xor the unmasked array with the pattern formula to get a masked matrix
             for x in range(self._size):
                 for y in range(self._size):
-                    if not is_protected(x, y):
+                    if not is_protected(x, y):  # check coordinates aren't static pattern, if not, proceed
                         if pattern == 0:
                             masked_array[y][x] ^= ((y + x) % 2 == 0)
                         elif pattern == 1:
@@ -344,7 +392,7 @@ class QRImage:
                 self._array = masked
 
     def _write_format_information(self, array: List[List[int]], mask_pattern: int):
-        # Using hardcoded table since there is no real reason to actually compute the format bits each time
+        # Using hardcoded table since there is only a few options and computing the bits would be time consuming.
         table = dict({
             "L": [
                 "111011111000100", "111001011110011", "111110110101010", "111100010011101",
@@ -366,22 +414,28 @@ class QRImage:
 
         info = table[self._ecl.name][mask_pattern]
 
+        # Write the format information as described in Figure 19
+
         i = 0
+        # left horizontal
         for x in range(9):
             if x != 6:
                 array[8][x] = int(info[i])
                 i += 1
 
+        # top vertical
         for y in range(7, -1, -1):
             if y != 6:
                 array[y][8] = int(info[i])
                 i += 1
 
         i = 0
+        # bottom vertical
         for y in range(self._size - 1, self._size - 8, -1):
             array[y][8] = int(info[i])
             i += 1
 
+        # right horizontal
         for x in range(self._size - 8, self._size):
             array[8][x] = int(info[i])
             i += 1
@@ -390,7 +444,17 @@ class QRImage:
         array[self._size - 8][8] = 1
 
     def _calculate_mask_score(self, array: List[List[int]]) -> int:
+        """
+        Calculates the mask score of the array
+
+        :param array: The array to use in the calculation
+        :return: The overall mask score of the array
+        """
+
         def colored_rows() -> int:
+            """
+            Checks for groups of 5+ adjacent modules in rows
+            """
             score = 0
             for y in range(self._size):
                 x = 0
@@ -414,6 +478,9 @@ class QRImage:
             return score
 
         def colored_cols() -> int:
+            """
+            Checks for groups of 5+ adjacent modules in columns
+            """
             score = 0
             for x in range(self._size):
                 y = 0
@@ -435,6 +502,9 @@ class QRImage:
             return score
 
         def colored_boxes() -> int:
+            """
+            Checks for 2x2 blocks of same color modules
+            """
             score = 0
             for y in range(self._size - 1):
                 for x in range(self._size - 1):
@@ -443,6 +513,9 @@ class QRImage:
             return score
 
         def finder_pattern() -> int:
+            """
+            Checks for patterns of dark:light:dark:dark:dark:light:dark (similar to finder pattern)
+            """
             score = 0
             pad_before = [0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1]
             pad_after = [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0]
@@ -464,6 +537,9 @@ class QRImage:
             return score
 
         def color_proportion() -> int:
+            """
+            Checks if the proportion of black and white modules are near 50%
+            """
             black_modules = 0
             for x in range(self._size):
                 for y in range(self._size):
@@ -481,6 +557,9 @@ class QRImage:
         return colored_rows() + colored_cols() + colored_boxes() + finder_pattern() + color_proportion()
 
     def _generate_image(self) -> Image:
+        """
+        Creates a PIL image object from the _array variable
+        """
         np_array = [[255 if i != 1 else 0 for i in row] for row in self._array]
 
         # Upscaling
@@ -490,6 +569,11 @@ class QRImage:
         return Image.fromarray(np_array.astype(numpy.uint8), mode='L')
 
     def get_image(self) -> Image:
+        """
+        Returns the representation of the QR code as an image
+
+        :return: A PIL Image object
+        """
         if self._need_regen:
             self._image = self._generate_image()
         return self._image

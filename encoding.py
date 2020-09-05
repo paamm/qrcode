@@ -6,6 +6,12 @@ import rs
 
 
 def optimal_data_mode(data: str) -> DATA_MODE:
+    """
+    Analyses a string and returns the best data mode (kanji not implemented)
+
+    :param data: The string to analyze
+    :return: Enum of the best mode to use
+    """
     numeric_regex = r"^\d+$"
     alphanum_regex = r"^[A-Z0-9 $%*+\-./:]+$"
 
@@ -24,6 +30,13 @@ def optimal_data_mode(data: str) -> DATA_MODE:
 
 
 def encode(data: str, mode: DATA_MODE = None) -> List[int]:
+    """
+    Encodes a string using a specific mode
+
+    :param data: The string to encode
+    :param mode: The mode to use. If not specified, will determine best mode based on the contents of data
+    :return: A list of ints containing the converted characters from the data string
+    """
     if mode is None:
         mode = optimal_data_mode(data)
 
@@ -35,13 +48,13 @@ def encode(data: str, mode: DATA_MODE = None) -> List[int]:
             char = data[i]
             value = ord(char)
             if 48 <= value <= 57:
-                # digit
+                # digits keep same value, convert string to int
                 encoded[i] = int(char)
             elif 65 <= value <= 90:
-                # letter
+                # letters are mapped in a way that A-Z = 10-35
                 encoded[i] = value - 55
             else:
-                # remaining chars
+                # remaining chars with no easy mapping
                 if char == " ":
                     encoded[i] = 36
                 elif char == "$":
@@ -69,8 +82,20 @@ def encode(data: str, mode: DATA_MODE = None) -> List[int]:
         return encoded
 
 
-def convert_to_binary(data: List[int], mode: DATA_MODE, version: int, ec: EC_LEVEL) -> str:
-    binary_stream = ""
+def _convert_to_binary(data: List[int], mode: DATA_MODE, version: int, ec: EC_LEVEL) -> str:
+    """
+    Convert encoded data to binary data with mode and character count indicators
+
+    :param data: The encoded data formatted as a list of integers
+    :param mode: The data mode to use
+    :param version: The QR version to use
+    :param ec: The error correction level to use
+    :return: The binary data as a string
+    """
+
+    binary_data = ""
+
+    # Group data and convert to binary
     if mode == DATA_MODE.Numeric:
         # Group data in groups of 3 digits
         for i in range(0, len(data), 3):
@@ -78,13 +103,13 @@ def convert_to_binary(data: List[int], mode: DATA_MODE, version: int, ec: EC_LEV
             length = len(str(group))
             if length == 3:
                 # 3 digits
-                binary_stream += "{0:010b}".format(group)
+                binary_data += "{0:010b}".format(group)
             elif length == 2:
                 # 2 digits
-                binary_stream += "{0:07b}".format(group)
+                binary_data += "{0:07b}".format(group)
             else:
                 # 1 digits
-                binary_stream += "{0:04b}".format(group)
+                binary_data += "{0:04b}".format(group)
     elif mode == DATA_MODE.Alphanumeric:
         # Group data in groups of 2 chars
         for i in range(0, len(data), 2):
@@ -92,42 +117,42 @@ def convert_to_binary(data: List[int], mode: DATA_MODE, version: int, ec: EC_LEV
             if len(group) == 2:
                 # normal group of 2 chars, convert from pseudo-base 45 to base 10 to binary
                 number = group[0] * 45 + group[1]
-                binary_stream += "{0:011b}".format(number)
+                binary_data += "{0:011b}".format(number)
             else:
                 # group of 1 digit, use 6-bit binary
-                binary_stream += "{0:06b}".format(group[0])
+                binary_data += "{0:06b}".format(group[0])
     elif mode == DATA_MODE.Byte:
         # Characters already in 0-255 range, just convert to 8-bit binary
         for char in data:
-            binary_stream += "{0:08b}".format(char)
+            binary_data += "{0:08b}".format(char)
 
     # add CCI
     cci = "{0:0b}".format(len(data))
-    cci = "0" * (CCI_LENGTH.get(mode)[version] - len(cci)) + cci  # pad start with 0s to get the correct length
-    binary_stream = cci + binary_stream
+    cci = "0" * (CCI_LENGTH.get(mode)[version] - len(cci)) + cci  # pad start with 0s to get required CCI length
+    binary_data = cci + binary_data
 
-    # add mode
-    binary_stream = "{0:04b}".format(mode.value) + binary_stream
+    # add data mode to start of string
+    binary_data = "{0:04b}".format(mode.value) + binary_data
 
-    # add terminator byte (4 bits or less if data is already filling near the limit
-    # converting 2 vars to string: ie. 1 and M to "1M"
-    empty_space = STREAM_LENGTH.get(str(version) + ec.name) - len(binary_stream)
+    # add terminator byte (4 bits or less if less than 4 bits available based on version) at end of string
+    # accessing specific value in dictionary by combining version and EC level (1 and "M" -> "1M")
+    empty_space = STREAM_LENGTH.get(str(version) + ec.name) - len(binary_data)
     pad_length = 4 if empty_space > 4 else empty_space
-    binary_stream += "0" * pad_length
+    binary_data += "0" * pad_length
 
     # add bit-padding (fill up last codeword)
-    missing = 8 - (len(binary_stream) % 8)
+    missing = 8 - (len(binary_data) % 8)
     missing = 0 if missing == 8 else missing  # if 8 bits are "missing", already multiple of 8 so no padding needed
-    binary_stream += "0" * missing
+    binary_data += "0" * missing
 
-    # add byte-padding (fill stream up to full size)
+    # add byte-padding (fill string up to full size)
     words = ["11101100", "00010001"]
     i = 0
-    while len(binary_stream) < STREAM_LENGTH.get(str(version) + ec.name):
-        binary_stream += words[i]
+    while len(binary_data) < STREAM_LENGTH.get(str(version) + ec.name):
+        binary_data += words[i]
         i ^= 1  # xoring i with 1 to alternate between first and second padding word
 
-    return binary_stream
+    return binary_data
 
 
 def generate_codewords(data: str, version: int, ec: EC_LEVEL) -> str:
@@ -140,14 +165,17 @@ def generate_codewords(data: str, version: int, ec: EC_LEVEL) -> str:
     :raise ValueError: if the data string is too long for the specified version and EC level
     :return: String of codeblocks in binary
     """
+
     data_mode = optimal_data_mode(data)
     encoded_data = encode(data, data_mode)
-    binary_stream = convert_to_binary(encoded_data, data_mode, version, ec)
+    binary_data = _convert_to_binary(encoded_data, data_mode, version, ec)
 
+    # Check if data is too long for specified version and EC level
     max_length = STREAM_LENGTH.get(str(version) + ec.name)
-    if len(binary_stream) > max_length:
+    if len(binary_data) > max_length:
         raise ValueError("The message to encode is too large for the specified version and EC level.")
 
+    # Retrieve constants for version and EC level
     ec_short = EC_SHORT.get(str(version) + ec.name)
     ec_long = EC_LONG.get(str(version) + ec.name)
     total_blocks = ec_short + ec_long
@@ -155,17 +183,22 @@ def generate_codewords(data: str, version: int, ec: EC_LEVEL) -> str:
     blocks: List[str] = []
     ec_blocks: List[str] = []
 
-    short_length = len(binary_stream) // total_blocks
+    # Calculate block length
+    short_length = len(binary_data) // total_blocks
     long_length = 0
     if ec_long > 0:
+        # If there are long blocks, round short_length down to nearest multiply of 8 and add 1 byte to long_length
         short_length = short_length - (short_length % 8)
         long_length = short_length + 8
 
+    # Divide the total amount of ecc codewords needed by the number of blocks to get # of ecc codewords per block
     ecc_amount = NUMBER_OF_ECC.get(str(version) + ec.name) // total_blocks
 
+    # TODO refactor next two loops in one function in rs.py? rs.create_ecc_block()?
     for i in range(ec_short):
         # Short blocks
-        block = binary_stream[short_length * i:short_length * (i + 1)]
+        # Generates the Reed-Solomon EC codewords and adds them to the ec_blocks list
+        block = binary_data[short_length * i:short_length * (i + 1)]  # get sublist that is 'short_length' long
         codewords = [block[j:j+8] for j in range(0, len(block), 8)]
         msg_poly = rs.message_poly(codewords)
         gen_poly = rs.rs_generator_poly(ecc_amount)
@@ -174,10 +207,10 @@ def generate_codewords(data: str, version: int, ec: EC_LEVEL) -> str:
         blocks.append(block)
         ec_blocks.append("".join(rs_codewords))
 
-    offset = ec_short * short_length
+    offset = ec_short * short_length  # create an offset to start reading after the data already read in short blocks
     for i in range(ec_long):
         # Long blocks
-        block = binary_stream[offset + long_length * i:offset + long_length * (i + 1)]
+        block = binary_data[offset + long_length * i:offset + long_length * (i + 1)]
         codewords = [block[j:j + 8] for j in range(0, len(block), 8)]
         msg_poly = rs.message_poly(codewords)
         gen_poly = rs.rs_generator_poly(ecc_amount)
@@ -189,23 +222,26 @@ def generate_codewords(data: str, version: int, ec: EC_LEVEL) -> str:
     final_stream = ""
 
     i = 0
-    while i < len(blocks[0]):  # interleave the different blocks
+    # The data from different blocks needs to be interleaved, meaning if we had 4 blocks, stream would look like:
+    # A1, B1, C1, D1, A2, B2, C2, D2, ...
+    while i < len(blocks[0]):  # interleave up to length of short block (first block is always short block)
         for block in blocks:
+            final_stream += block[i:i+8]  # append byte, not bit
+        i += 8
+
+    # if there are long blocks, finish the interleaving using only data from long blocks
+    # ie: A1, B1, C1, D1, C2, D2 if A, B are short and C, D are long
+    while i < len(blocks[-1]):  # last block is either short and we don't loop, or it is long and we loop until end.
+        for block in blocks[ec_short:]:  # get sublist of blocks list to only use long blocks
             final_stream += block[i:i+8]
         i += 8
 
-    # add the remaining bits from the long blocks
-    while i < len(blocks[-1]):
-        for block in blocks[ec_short:]:  # only loop through long blocks
-            final_stream += block[i:i+8]
-        i += 8
-
-    # add ec bits
-    for i in range(0, ecc_amount * 8, 8):
+    # Interleave the same way but with ECCs. Loop is simpler since EC blocks all have same length
+    for i in range(0, ecc_amount * 8, 8):  # increase i by 8 to add data byte by byte instead of bit by bit
         for block in ec_blocks:
             final_stream += block[i:i+8]
 
-    # add remainder bits if needed to have enough bits to write to every module
+    # add remainder bits if needed
     final_stream += "0" * REMAINDER_BITS[version]
 
     return final_stream
