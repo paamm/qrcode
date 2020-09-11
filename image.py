@@ -8,7 +8,7 @@ import encoding
 
 
 class QRImage:
-    def __init__(self, version: int, ec_level: Union[EC_LEVEL, str], message: str):
+    def __init__(self, version: int, ec_level: Union[EC_LEVEL, str], message: str, mask=-1):
         """
         Create a QRImage object with the given arguments.
 
@@ -19,6 +19,8 @@ class QRImage:
         self._size = version * 4 + 17
         self._version = version
         self._message = message
+        self._mask = mask  # -1 if we want to find optimal mask, otherwise force mask value
+        self._used_mask = 0
 
         # Cast ec_level to EC_LEVEL enum if needed
         if type(ec_level) is str:
@@ -235,6 +237,21 @@ class QRImage:
         self._need_regen = True
         self._write_data()
 
+    def get_mask(self) -> int:
+        if self._mask == -1:
+            # not using forced mask
+            return self._used_mask
+        else:
+            return self._mask
+
+    def set_mask(self, new_mask: int):
+        if not 0 <= new_mask <= 7:
+            raise ValueError("Illegal mask pattern, must be between 0 and 7")
+
+        self._mask = new_mask
+        self._write_best_mask()
+        self._need_regen = True
+
     def _write_data(self):
         """
         Write the contents of _data to the _unmasked matrix
@@ -323,7 +340,8 @@ class QRImage:
 
     def _write_best_mask(self):
         """
-        Reads the _unmasked matrix to determine the best mask and writes the masked matrix to _array
+        Reads the _unmasked matrix to determine the best mask and writes the masked matrix to _array unless the
+        instance has a specific mask value set.
         """
 
         def is_protected(x: int, y: int) -> bool:
@@ -382,10 +400,16 @@ class QRImage:
                         masked_array[y][x] ^= pattern_formula(x, y)
             return masked_array
 
+        if self._mask != -1:
+            # Forced mask, use specified one
+            self._array = mask_pattern(self._mask)
+            return
+
+        # No forced mask, find best one
         # initialize values by computing mask 0, loop for mask 1-7
         self._array = mask_pattern(0)
-        self._array = self._unmasked
         lowest_score = self._calculate_mask_score(self._array)
+        self._used_mask = 0
 
         for mask in range(1, 8):
             masked = mask_pattern(mask)
@@ -393,6 +417,7 @@ class QRImage:
             if score < lowest_score:
                 lowest_score = score
                 self._array = masked
+                self._used_mask = mask
 
     def _write_format_information(self, array: List[List[int]], mask_pattern: int):
         # Using hardcoded table since there is only a few options and computing the bits would be time consuming.
